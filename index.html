@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pflegeprotokoll</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Pflege">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#3E96DB">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&display=swap">
+<script src="xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#F8FBFF;
+    --surface:#FFFFFF;
+    --surface-2:#EDF6FE;
+    --ink:#28394C;
+    --muted:#7C90A5;
+    --border:#DCEBFA;
+    --primary:#3E96DB;
+    --primary-dark:#2C74AE;
+    --primary-tint:#E4F2FD;
+    --accent:#F5B24C;
+    --accent-dark:#DE9A2E;
+    --danger:#E0685A;
+    --danger-tint:#FCEBE7;
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#111C29;
+      --surface:#182635;
+      --surface-2:#1F3145;
+      --ink:#E9F1FA;
+      --muted:#8CA3BA;
+      --border:#2C4359;
+      --primary:#5FA8E0;
+      --primary-dark:#3E82BB;
+      --primary-tint:#203245;
+      --accent:#F2B85C;
+      --accent-dark:#D6902A;
+      --danger:#E38177;
+      --danger-tint:#3A2521;
+      color-scheme:dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#111C29;
+    --surface:#182635;
+    --surface-2:#1F3145;
+    --ink:#E9F1FA;
+    --muted:#8CA3BA;
+    --border:#2C4359;
+    --primary:#5FA8E0;
+    --primary-dark:#3E82BB;
+    --primary-tint:#203245;
+    --accent:#F2B85C;
+    --accent-dark:#D6902A;
+    --danger:#E38177;
+    --danger-tint:#3A2521;
+    color-scheme:dark;
+  }
+
+  *{box-sizing:border-box;}
+  [hidden]{display:none!important;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Public Sans",-apple-system,BlinkMacSystemFont,sans-serif;
+    padding-inline:max(16px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-right));
+    padding-block:calc(20px + env(safe-area-inset-top)) calc(40px + env(safe-area-inset-bottom));
+  }
+  h1,h2,h3{font-family:"Fraunces",Georgia,serif;text-wrap:balance;margin:0;}
+
+  .wrap{max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:18px;}
+
+  header{display:flex;flex-direction:column;gap:4px;}
+  header .title-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
+  header h1{font-size:26px;font-weight:700;color:var(--primary-dark);}
+  header p{margin:0;color:var(--muted);font-size:13px;}
+  header p.export-hint{font-size:12px;margin-top:2px;}
+
+  .stats{
+    display:grid;
+    grid-template-columns:repeat(2,1fr);
+    gap:10px;
+  }
+  .stat{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:12px 10px;
+    text-align:center;
+  }
+  .stat .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+  .stat .value{font-family:"Fraunces",serif;font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px;}
+  .stat.georg .value{color:var(--primary-dark);}
+  .stat.dorothea .value{color:var(--accent-dark);}
+  .stat.hella .value{color:var(--danger);}
+
+  .card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:18px;
+    padding:18px;
+  }
+  .card h2{font-size:17px;color:var(--ink);margin-bottom:14px;}
+
+  .field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}
+  .field label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600;}
+  select, input[type="number"]{
+    font:inherit;
+    font-size:16px;
+    padding:11px 12px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    background:var(--surface-2);
+    color:var(--ink);
+    width:100%;
+  }
+  select:focus, input:focus{outline:2px solid var(--primary);outline-offset:1px;}
+
+  .person-toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .person-toggle button{
+    font:inherit;
+    font-size:13px;
+    font-weight:600;
+    padding:10px 4px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    background:var(--surface-2);
+    color:var(--ink);
+    cursor:pointer;
+  }
+  .person-toggle button[aria-pressed="true"]{
+    background:var(--primary);
+    border-color:var(--primary-dark);
+    color:#fff;
+  }
+
+  .today-badge{
+    font-size:12px;
+    color:var(--muted);
+    background:var(--surface-2);
+    border-radius:8px;
+    padding:6px 10px;
+    display:inline-block;
+    margin-bottom:14px;
+  }
+
+  .save-btn{
+    width:100%;
+    font:inherit;
+    font-size:16px;
+    font-weight:700;
+    padding:13px;
+    border-radius:12px;
+    border:none;
+    background:var(--accent);
+    color:#fff;
+    cursor:pointer;
+  }
+  .save-btn:active{background:var(--accent-dark);}
+
+  .export-btn{
+    font:inherit;
+    font-size:13px;
+    font-weight:600;
+    padding:9px 14px;
+    border-radius:10px;
+    border:1px solid var(--primary);
+    background:var(--primary-tint);
+    color:var(--primary-dark);
+    cursor:pointer;
+    white-space:nowrap;
+  }
+
+  .day-group{display:flex;flex-direction:column;gap:8px;}
+  .day-heading{
+    font-size:12px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color:var(--muted);
+    margin-top:6px;
+  }
+  .entry{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:12px 14px;
+  }
+  .entry .icon{
+    width:36px;height:36px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--primary-tint);color:var(--primary-dark);
+    font-size:15px;font-weight:700;flex-shrink:0;
+  }
+  .entry.beide .icon{background:var(--surface-2);color:var(--accent-dark);}
+  .entry.hella .icon{background:var(--danger-tint);color:var(--danger);}
+  .entry .info{flex:1;min-width:0;}
+  .entry .zweck{font-size:14px;font-weight:600;line-height:1.3;}
+  .entry .meta{font-size:12px;color:var(--muted);margin-top:2px;}
+  .entry .minuten{
+    font-variant-numeric:tabular-nums;
+    font-weight:700;
+    font-size:14px;
+    color:var(--primary-dark);
+    white-space:nowrap;
+  }
+  .entry .del{
+    border:none;background:none;color:var(--muted);
+    font-size:18px;line-height:1;cursor:pointer;padding:4px 2px;
+  }
+  .entry .del:hover{color:var(--danger);}
+
+  .export-reminder{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    background:var(--accent-tint, var(--surface-2));
+    border-color:var(--accent);
+  }
+  .export-reminder p{
+    margin:0;
+    font-size:13px;
+    color:var(--ink);
+  }
+  .export-reminder .export-btn{
+    background:var(--accent);
+    border-color:var(--accent-dark);
+    color:#fff;
+    flex-shrink:0;
+  }
+
+  .storage-warning{
+    background:var(--danger-tint);
+    border-color:var(--danger);
+  }
+  .storage-warning p{margin:0;font-size:13px;line-height:1.4;color:var(--ink);}
+
+  .empty{
+    text-align:center;
+    color:var(--muted);
+    font-size:13px;
+    padding:24px 10px;
+  }
+
+  .toast{
+    position:fixed;
+    bottom:24px;left:50%;
+    transform:translateX(-50%);
+    background:var(--primary-dark);
+    color:#fff;
+    padding:10px 18px;
+    border-radius:10px;
+    font-size:13px;
+    box-shadow:0 4px 14px rgba(0,0,0,.2);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .25s ease, transform .25s ease;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px);}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="title-row">
+      <h1>Pflegeprotokoll</h1>
+      <button class="export-btn" id="exportBtn">Als Excel exportieren</button>
+    </div>
+  </header>
+
+  <div class="card storage-warning" id="storageWarning" hidden>
+    <p><strong>Achtung:</strong> Dieses Gerät speichert die Einträge gerade nicht dauerhaft. Alles, was du jetzt einträgst, geht beim Schließen der App verloren.</p>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="label">Diesen Monat</div><div class="value" id="statTotal">0 Min</div></div>
+    <div class="stat georg"><div class="label">Georg</div><div class="value" id="statGeorg">0 Min</div></div>
+    <div class="stat dorothea"><div class="label">Dorothea</div><div class="value" id="statDorothea">0 Min</div></div>
+    <div class="stat hella"><div class="label">Hella</div><div class="value" id="statHella">0 Min</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Neuer Eintrag</h2>
+    <div class="today-badge" id="todayBadge"></div>
+
+    <div class="field">
+      <label for="zweck">Was wurde gemacht?</label>
+      <select id="zweck"></select>
+    </div>
+
+    <div class="field" id="eigenerFeld" hidden>
+      <label for="eigenerText">Eigene Beschreibung</label>
+      <input type="text" id="eigenerText" placeholder="z.B. Arztbesuch begleitet" maxlength="80">
+    </div>
+
+    <div class="field">
+      <label for="minuten">Dauer (Minuten)</label>
+      <input type="number" id="minuten" min="1" step="1" placeholder="z.B. 20" inputmode="numeric">
+    </div>
+
+    <div class="field">
+      <label>Für wen?</label>
+      <div class="person-toggle" id="personToggle">
+        <button type="button" data-person="Georg">Georg</button>
+        <button type="button" data-person="Dorothea">Dorothea</button>
+        <button type="button" data-person="Beide">Beide (Georg &amp; Dorothea)</button>
+        <button type="button" data-person="Hella">Hella</button>
+      </div>
+    </div>
+
+    <button class="save-btn" id="saveBtn">Eintrag speichern</button>
+  </div>
+
+  <div class="card export-reminder" id="exportReminder" hidden>
+    <p id="exportReminderText"></p>
+    <button class="export-btn" id="exportReminderBtn">Jetzt exportieren</button>
+  </div>
+
+  <div id="list"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  var ZWECKE = [
+    "Hilfe für Aufsuchen/Verlassen Bett",
+    "Hilfe bei Ausscheidungen",
+    "Kämmen/Rasieren",
+    "Kleine Körperpflege",
+    "Große Körperpflege",
+    "Einkaufen",
+    "Klingeln wegen Hilfe",
+    "Ins Bett gehen abends",
+    "Aus dem Bett morgens",
+    "Wäsche waschen",
+    "Sonstiger Zeitaufwand",
+    "Wäsche aufhängen"
+  ];
+  var EIGENER_WERT = "__eigener__";
+
+  var STORAGE_KEY = "pflegeprotokoll_entries_v1";
+  var LAST_EXPORT_KEY = "pflegeprotokoll_last_export_v1";
+  var REMINDER_DAYS = 14;
+  var selectedPerson = null;
+
+  var zweckSel = document.getElementById("zweck");
+  var eigenerFeld = document.getElementById("eigenerFeld");
+  var eigenerText = document.getElementById("eigenerText");
+  var minutenInp = document.getElementById("minuten");
+  var personToggle = document.getElementById("personToggle");
+  var saveBtn = document.getElementById("saveBtn");
+  var list = document.getElementById("list");
+  var toast = document.getElementById("toast");
+  var todayBadge = document.getElementById("todayBadge");
+  var exportBtn = document.getElementById("exportBtn");
+  var exportReminder = document.getElementById("exportReminder");
+  var exportReminderText = document.getElementById("exportReminderText");
+  var exportReminderBtn = document.getElementById("exportReminderBtn");
+  var storageWarning = document.getElementById("storageWarning");
+
+  var WEEKDAYS = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
+  var MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+
+  function fmtDateLong(d){
+    return WEEKDAYS[d.getDay()] + ", " + d.getDate() + ". " + MONTHS[d.getMonth()] + " " + d.getFullYear();
+  }
+  function fmtDateShort(d){
+    return String(d.getDate()).padStart(2,"0") + "." + String(d.getMonth()+1).padStart(2,"0") + "." + d.getFullYear();
+  }
+  function isoDate(d){
+    return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  }
+
+  var eigenerOpt = document.createElement("option");
+  eigenerOpt.value = EIGENER_WERT;
+  eigenerOpt.textContent = "Eigener Eintrag …";
+  zweckSel.appendChild(eigenerOpt);
+
+  ZWECKE.forEach(function(z){
+    var opt = document.createElement("option");
+    opt.value = z; opt.textContent = z;
+    zweckSel.appendChild(opt);
+  });
+  zweckSel.value = ZWECKE[0];
+
+  zweckSel.addEventListener("change", function(){
+    eigenerFeld.hidden = zweckSel.value !== EIGENER_WERT;
+    if(!eigenerFeld.hidden) eigenerText.focus();
+  });
+
+  var now = new Date();
+  todayBadge.textContent = "Heutiges Datum: " + fmtDateLong(now);
+
+  personToggle.addEventListener("click", function(e){
+    var btn = e.target.closest("button[data-person]");
+    if(!btn) return;
+    selectedPerson = btn.getAttribute("data-person");
+    Array.prototype.forEach.call(personToggle.querySelectorAll("button"), function(b){
+      b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+    });
+  });
+
+  function storageWorks(){
+    try{
+      var k = "__pflege_test__";
+      localStorage.setItem(k, "1");
+      var ok = localStorage.getItem(k) === "1";
+      localStorage.removeItem(k);
+      return ok;
+    }catch(e){ return false; }
+  }
+
+  function loadEntries(){
+    try{
+      var raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    }catch(e){ return []; }
+  }
+  function saveEntries(entries){
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+      return localStorage.getItem(STORAGE_KEY) === JSON.stringify(entries);
+    }catch(e){ return false; }
+  }
+
+  var entries = loadEntries();
+  var storageOk = storageWorks();
+
+  function showToast(msg){
+    toast.textContent = msg;
+    toast.classList.add("show");
+    setTimeout(function(){ toast.classList.remove("show"); }, 1800);
+  }
+
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  function initials(zweck){
+    var words = zweck.split(/[\s\/]+/).filter(Boolean);
+    if(words.length === 1) return words[0].slice(0,2).toUpperCase();
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+
+  function monthKey(d){ return d.getFullYear() + "-" + d.getMonth(); }
+
+  function renderStats(){
+    var thisMonth = monthKey(new Date());
+    var total = 0, georg = 0, dorothea = 0, hella = 0;
+    entries.forEach(function(en){
+      var d = new Date(en.iso + "T00:00:00");
+      if(monthKey(d) !== thisMonth) return;
+      total += en.minuten;
+      if(en.person === "Georg") georg += en.minuten;
+      else if(en.person === "Dorothea") dorothea += en.minuten;
+      else if(en.person === "Hella") hella += en.minuten;
+      else { georg += en.minuten; dorothea += en.minuten; }
+    });
+    document.getElementById("statTotal").textContent = total + " Min";
+    document.getElementById("statGeorg").textContent = georg + " Min";
+    document.getElementById("statDorothea").textContent = dorothea + " Min";
+    document.getElementById("statHella").textContent = hella + " Min";
+  }
+
+  function renderList(){
+    list.innerHTML = "";
+    if(entries.length === 0){
+      var empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "Noch keine Einträge. Der erste Eintrag erscheint hier.";
+      list.appendChild(empty);
+      return;
+    }
+
+    var sorted = entries.slice().sort(function(a,b){ return b.ts - a.ts; });
+    var groups = [];
+    var lastIso = null;
+    sorted.forEach(function(en){
+      if(en.iso !== lastIso){
+        groups.push({iso: en.iso, items: []});
+        lastIso = en.iso;
+      }
+      groups[groups.length-1].items.push(en);
+    });
+
+    groups.forEach(function(g){
+      var heading = document.createElement("div");
+      heading.className = "day-heading";
+      var d = new Date(g.iso + "T00:00:00");
+      heading.textContent = fmtDateLong(d);
+      list.appendChild(heading);
+
+      var groupEl = document.createElement("div");
+      groupEl.className = "day-group";
+
+      g.items.forEach(function(en){
+        var row = document.createElement("div");
+        row.className = "entry" + (en.person === "Beide" ? " beide" : "") + (en.person === "Hella" ? " hella" : "");
+        row.innerHTML =
+          '<div class="icon">' + esc(initials(en.zweck)) + '</div>' +
+          '<div class="info">' +
+            '<div class="zweck">' + esc(en.zweck) + '</div>' +
+            '<div class="meta">' + esc(en.person) + '</div>' +
+          '</div>' +
+          '<div class="minuten">' + en.minuten + ' Min</div>' +
+          '<button class="del" title="Löschen" data-id="' + esc(en.id) + '">&times;</button>';
+        groupEl.appendChild(row);
+      });
+      list.appendChild(groupEl);
+    });
+  }
+
+  list.addEventListener("click", function(e){
+    var btn = e.target.closest("button.del");
+    if(!btn) return;
+    var id = btn.getAttribute("data-id");
+    entries = entries.filter(function(en){ return en.id !== id; });
+    saveEntries(entries);
+    renderList();
+    renderStats();
+  });
+
+  saveBtn.addEventListener("click", function(){
+    var zweck = zweckSel.value;
+    if(zweck === EIGENER_WERT){
+      zweck = eigenerText.value.trim();
+      if(!zweck){
+        showToast("Bitte eigene Beschreibung eingeben");
+        eigenerText.focus();
+        return;
+      }
+    }
+    var minuten = parseInt(minutenInp.value, 10);
+    if(!minuten || minuten <= 0){
+      showToast("Bitte Minuten eingeben");
+      minutenInp.focus();
+      return;
+    }
+    if(!selectedPerson){
+      showToast("Bitte auswählen: Georg, Dorothea oder Beide");
+      return;
+    }
+    var d = new Date();
+    var entry = {
+      id: Date.now() + "-" + Math.random().toString(36).slice(2,7),
+      iso: isoDate(d),
+      ts: d.getTime(),
+      zweck: zweck,
+      minuten: minuten,
+      person: selectedPerson
+    };
+    entries.push(entry);
+    var saved = saveEntries(entries);
+    renderList();
+    renderStats();
+    minutenInp.value = "";
+    eigenerText.value = "";
+    eigenerFeld.hidden = true;
+    zweckSel.value = ZWECKE[0];
+    if(saved){
+      showToast("Eintrag gespeichert");
+    } else {
+      showToast("Achtung: nicht dauerhaft gespeichert!");
+      storageWarning.hidden = false;
+    }
+  });
+
+  function loadLastExport(){
+    try{ return localStorage.getItem(LAST_EXPORT_KEY); }catch(e){ return null; }
+  }
+  function saveLastExport(ts){
+    try{ localStorage.setItem(LAST_EXPORT_KEY, String(ts)); }catch(e){}
+  }
+
+  function renderExportReminder(){
+    var lastStr = loadLastExport();
+    var last = lastStr ? parseInt(lastStr, 10) : null;
+    var daysSince = last ? Math.floor((Date.now() - last) / 86400000) : null;
+
+    if(entries.length === 0){
+      exportReminder.hidden = true;
+      return;
+    }
+    if(last === null || daysSince >= REMINDER_DAYS){
+      exportReminderText.textContent = last === null
+        ? "Noch nie exportiert. Jetzt eine Sicherung als Excel erstellen?"
+        : "Seit " + daysSince + " Tagen nicht mehr exportiert. Jetzt sichern?";
+      exportReminder.hidden = false;
+    } else {
+      exportReminder.hidden = true;
+    }
+  }
+
+  async function runExport(){
+    if(entries.length === 0){
+      showToast("Noch keine Einträge zum Exportieren");
+      return;
+    }
+
+    function buildSheet(list){
+      var rows = [["Datum","Wochentag","Zweck","Für wen","Minuten","Stunden"]];
+      var sorted = list.slice().sort(function(a,b){ return a.ts - b.ts; });
+      sorted.forEach(function(en){
+        var d = new Date(en.iso + "T00:00:00");
+        rows.push([
+          fmtDateShort(d),
+          WEEKDAYS[d.getDay()],
+          en.zweck,
+          en.person,
+          en.minuten,
+          Math.round((en.minuten/60)*100)/100
+        ]);
+      });
+      var totalMinuten = list.reduce(function(s,en){ return s + en.minuten; }, 0);
+      rows.push([]);
+      rows.push(["", "", "", "Gesamt", totalMinuten, Math.round((totalMinuten/60)*100)/100]);
+      var ws = XLSX.utils.aoa_to_sheet(rows);
+      ws["!cols"] = [{wch:12},{wch:12},{wch:32},{wch:10},{wch:9},{wch:9}];
+      return ws;
+    }
+
+    var hellaEntries = entries.filter(function(en){ return en.person === "Hella"; });
+    var otherEntries = entries.filter(function(en){ return en.person !== "Hella"; });
+
+    var wb = XLSX.utils.book_new();
+    if(otherEntries.length){
+      XLSX.utils.book_append_sheet(wb, buildSheet(otherEntries), "Pflegeprotokoll");
+    }
+    if(hellaEntries.length){
+      XLSX.utils.book_append_sheet(wb, buildSheet(hellaEntries), "Hella");
+    }
+    var wbout = XLSX.write(wb, {bookType:"xlsx", type:"array"});
+    var blob = new Blob([wbout], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+
+    var filename = "Pflegeprotokoll_" + isoDate(new Date()) + ".xlsx";
+    var file = new File([blob], filename, {type: blob.type});
+
+    if(navigator.canShare && navigator.canShare({files: [file]})){
+      try{
+        await navigator.share({files: [file], title: filename});
+        saveLastExport(Date.now());
+        renderExportReminder();
+        showToast("Excel-Datei geteilt");
+      }catch(err){
+        if(!err || err.name !== "AbortError") showToast("Export fehlgeschlagen");
+      }
+      return;
+    }
+
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 10000);
+    saveLastExport(Date.now());
+    renderExportReminder();
+    showToast("Excel-Datei gespeichert");
+  }
+
+  exportBtn.addEventListener("click", runExport);
+  exportReminderBtn.addEventListener("click", runExport);
+
+  if(!storageOk){
+    storageWarning.hidden = false;
+  }
+
+  if(navigator.storage && navigator.storage.persist){
+    navigator.storage.persist().catch(function(){});
+  }
+  if("serviceWorker" in navigator){
+    navigator.serviceWorker.register("sw.js").catch(function(){});
+  }
+
+  renderList();
+  renderStats();
+  renderExportReminder();
+})();
+</script>
+</body>
+</html>
