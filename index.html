@@ -144,15 +144,23 @@
     color:#fff;
   }
 
-  .today-badge{
-    font-size:12px;
-    color:var(--muted);
+  input[type="date"]{
+    font:inherit;
+    font-size:16px;
+    padding:11px 12px;
+    border-radius:10px;
+    border:1px solid var(--border);
     background:var(--surface-2);
-    border-radius:8px;
-    padding:6px 10px;
-    display:inline-block;
-    margin-bottom:14px;
+    color:var(--ink);
+    width:100%;
+    min-width:0;
+    min-height:46px;
+    -webkit-appearance:none;
+    appearance:none;
+    text-align:left;
   }
+  .date-hint{font-size:12px;color:var(--muted);}
+  .date-hint.past{color:var(--accent-dark);font-weight:700;}
 
   .save-btn{
     width:100%;
@@ -296,7 +304,12 @@
 
   <div class="card">
     <h2>Neuer Eintrag</h2>
-    <div class="today-badge" id="todayBadge"></div>
+
+    <div class="field">
+      <label for="datum">Für welchen Tag?</label>
+      <input type="date" id="datum">
+      <div class="date-hint" id="dateHint"></div>
+    </div>
 
     <div class="field">
       <label for="zweck">Was wurde gemacht?</label>
@@ -367,7 +380,8 @@
   var saveBtn = document.getElementById("saveBtn");
   var list = document.getElementById("list");
   var toast = document.getElementById("toast");
-  var todayBadge = document.getElementById("todayBadge");
+  var datumInp = document.getElementById("datum");
+  var dateHint = document.getElementById("dateHint");
   var exportBtn = document.getElementById("exportBtn");
   var exportReminder = document.getElementById("exportReminder");
   var exportReminderText = document.getElementById("exportReminderText");
@@ -404,8 +418,36 @@
     if(!eigenerFeld.hidden) eigenerText.focus();
   });
 
-  var now = new Date();
-  todayBadge.textContent = "Heutiges Datum: " + fmtDateLong(now);
+  function daysAgoIso(n){
+    var d = new Date();
+    d.setDate(d.getDate() - n);
+    return isoDate(d);
+  }
+
+  function setDatum(iso){
+    var today = daysAgoIso(0);
+    if(!iso || iso > today) iso = today;
+    datumInp.max = today;
+    datumInp.value = iso;
+    var label = fmtDateLong(new Date(iso + "T00:00:00"));
+    dateHint.textContent = iso === today ? label : "Nachtrag für " + label;
+    dateHint.classList.toggle("past", iso !== today);
+  }
+
+  datumInp.addEventListener("change", function(){ setDatum(datumInp.value); });
+
+  // Keep "today" correct when the app stays open past midnight.
+  var lastToday = daysAgoIso(0);
+  document.addEventListener("visibilitychange", function(){
+    if(document.hidden) return;
+    var today = daysAgoIso(0);
+    if(today !== lastToday){
+      if(datumInp.value === lastToday) setDatum(today); else setDatum(datumInp.value);
+      lastToday = today;
+    }
+  });
+
+  setDatum(lastToday);
 
   personToggle.addEventListener("click", function(e){
     var btn = e.target.closest("button[data-person]");
@@ -490,7 +532,9 @@
       return;
     }
 
-    var sorted = entries.slice().sort(function(a,b){ return b.ts - a.ts; });
+    var sorted = entries.slice().sort(function(a,b){
+      return a.iso === b.iso ? b.ts - a.ts : (a.iso < b.iso ? 1 : -1);
+    });
     var groups = [];
     var lastIso = null;
     sorted.forEach(function(en){
@@ -558,11 +602,12 @@
       showToast("Bitte auswählen: Georg, Dorothea oder Beide");
       return;
     }
-    var d = new Date();
+    var iso = datumInp.value || daysAgoIso(0);
+    var isToday = iso === daysAgoIso(0);
     var entry = {
       id: Date.now() + "-" + Math.random().toString(36).slice(2,7),
-      iso: isoDate(d),
-      ts: d.getTime(),
+      iso: iso,
+      ts: Date.now(),
       zweck: zweck,
       minuten: minuten,
       person: selectedPerson
@@ -575,8 +620,9 @@
     eigenerText.value = "";
     eigenerFeld.hidden = true;
     zweckSel.value = ZWECKE[0];
+    setDatum(daysAgoIso(0));
     if(saved){
-      showToast("Eintrag gespeichert");
+      showToast(isToday ? "Eintrag gespeichert" : "Nachtrag für " + fmtDateShort(new Date(iso + "T00:00:00")) + " gespeichert");
     } else {
       showToast("Achtung: nicht dauerhaft gespeichert!");
       storageWarning.hidden = false;
@@ -617,7 +663,9 @@
 
     function buildSheet(list){
       var rows = [["Datum","Wochentag","Zweck","Für wen","Minuten","Stunden"]];
-      var sorted = list.slice().sort(function(a,b){ return a.ts - b.ts; });
+      var sorted = list.slice().sort(function(a,b){
+        return a.iso === b.iso ? a.ts - b.ts : (a.iso < b.iso ? -1 : 1);
+      });
       sorted.forEach(function(en){
         var d = new Date(en.iso + "T00:00:00");
         rows.push([
