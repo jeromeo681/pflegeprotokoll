@@ -114,7 +114,7 @@
 
   .field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}
   .field label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600;}
-  select, input[type="number"]{
+  select, input[type="number"], input[type="text"]{
     font:inherit;
     font-size:16px;
     padding:11px 12px;
@@ -230,6 +230,25 @@
     font-size:18px;line-height:1;cursor:pointer;padding:4px 2px;
   }
   .entry .del:hover{color:var(--danger);}
+  .entry .edit{
+    border:1px solid var(--border);background:var(--surface-2);color:var(--primary-dark);
+    font-size:16px;line-height:1;cursor:pointer;padding:7px 9px;border-radius:9px;
+  }
+  .entry.editing{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);}
+  #formCard.editing{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);}
+  .cancel-btn{
+    width:100%;
+    margin-top:8px;
+    font:inherit;
+    font-size:15px;
+    font-weight:600;
+    padding:11px;
+    border-radius:12px;
+    border:1px solid var(--border);
+    background:var(--surface-2);
+    color:var(--ink);
+    cursor:pointer;
+  }
 
   .export-reminder{
     display:flex;
@@ -302,8 +321,8 @@
     <div class="stat hella"><div class="label">Hella</div><div class="value" id="statHella">0 Min</div></div>
   </div>
 
-  <div class="card">
-    <h2>Neuer Eintrag</h2>
+  <div class="card" id="formCard">
+    <h2 id="formTitle">Neuer Eintrag</h2>
 
     <div class="field">
       <label for="datum">Für welchen Tag?</label>
@@ -337,6 +356,7 @@
     </div>
 
     <button class="save-btn" id="saveBtn">Eintrag speichern</button>
+    <button type="button" class="cancel-btn" id="cancelEditBtn" hidden>Abbrechen</button>
   </div>
 
   <div class="card export-reminder" id="exportReminder" hidden>
@@ -371,6 +391,7 @@
   var LAST_EXPORT_KEY = "pflegeprotokoll_last_export_v1";
   var REMINDER_DAYS = 14;
   var selectedPerson = null;
+  var editingId = null;
 
   var zweckSel = document.getElementById("zweck");
   var eigenerFeld = document.getElementById("eigenerFeld");
@@ -380,6 +401,9 @@
   var saveBtn = document.getElementById("saveBtn");
   var list = document.getElementById("list");
   var toast = document.getElementById("toast");
+  var formCard = document.getElementById("formCard");
+  var formTitle = document.getElementById("formTitle");
+  var cancelEditBtn = document.getElementById("cancelEditBtn");
   var datumInp = document.getElementById("datum");
   var dateHint = document.getElementById("dateHint");
   var exportBtn = document.getElementById("exportBtn");
@@ -449,13 +473,17 @@
 
   setDatum(lastToday);
 
+  function setPerson(p){
+    selectedPerson = p;
+    Array.prototype.forEach.call(personToggle.querySelectorAll("button"), function(b){
+      b.setAttribute("aria-pressed", b.getAttribute("data-person") === p ? "true" : "false");
+    });
+  }
+
   personToggle.addEventListener("click", function(e){
     var btn = e.target.closest("button[data-person]");
     if(!btn) return;
-    selectedPerson = btn.getAttribute("data-person");
-    Array.prototype.forEach.call(personToggle.querySelectorAll("button"), function(b){
-      b.setAttribute("aria-pressed", b === btn ? "true" : "false");
-    });
+    setPerson(btn.getAttribute("data-person"));
   });
 
   function storageWorks(){
@@ -557,7 +585,7 @@
 
       g.items.forEach(function(en){
         var row = document.createElement("div");
-        row.className = "entry" + (en.person === "Beide" ? " beide" : "") + (en.person === "Hella" ? " hella" : "");
+        row.className = "entry" + (en.person === "Beide" ? " beide" : "") + (en.person === "Hella" ? " hella" : "") + (en.id === editingId ? " editing" : "");
         row.innerHTML =
           '<div class="icon">' + esc(initials(en.zweck)) + '</div>' +
           '<div class="info">' +
@@ -565,18 +593,67 @@
             '<div class="meta">' + esc(en.person) + '</div>' +
           '</div>' +
           '<div class="minuten">' + en.minuten + ' Min</div>' +
-          '<button class="del" title="Löschen" data-id="' + esc(en.id) + '">&times;</button>';
+          '<button class="edit" title="Ändern" aria-label="Eintrag ändern" data-id="' + esc(en.id) + '">&#9998;</button>' +
+          '<button class="del" title="Löschen" aria-label="Eintrag löschen" data-id="' + esc(en.id) + '">&times;</button>';
         groupEl.appendChild(row);
       });
       list.appendChild(groupEl);
     });
   }
 
+  function resetForm(){
+    editingId = null;
+    minutenInp.value = "";
+    eigenerText.value = "";
+    eigenerFeld.hidden = true;
+    zweckSel.value = ZWECKE[0];
+    setDatum(daysAgoIso(0));
+    formTitle.textContent = "Neuer Eintrag";
+    saveBtn.textContent = "Eintrag speichern";
+    cancelEditBtn.hidden = true;
+    formCard.classList.remove("editing");
+  }
+
+  function startEdit(id){
+    var en = entries.find(function(x){ return x.id === id; });
+    if(!en) return;
+    editingId = id;
+    setDatum(en.iso);
+    if(ZWECKE.indexOf(en.zweck) >= 0){
+      zweckSel.value = en.zweck;
+      eigenerText.value = "";
+      eigenerFeld.hidden = true;
+    } else {
+      zweckSel.value = EIGENER_WERT;
+      eigenerText.value = en.zweck;
+      eigenerFeld.hidden = false;
+    }
+    minutenInp.value = en.minuten;
+    setPerson(en.person);
+    formTitle.textContent = "Eintrag ändern";
+    saveBtn.textContent = "Änderung speichern";
+    cancelEditBtn.hidden = false;
+    formCard.classList.add("editing");
+    renderList();
+    formCard.scrollIntoView({behavior: "smooth", block: "start"});
+  }
+
+  cancelEditBtn.addEventListener("click", function(){
+    resetForm();
+    renderList();
+  });
+
   list.addEventListener("click", function(e){
+    var editBtn = e.target.closest("button.edit");
+    if(editBtn){
+      startEdit(editBtn.getAttribute("data-id"));
+      return;
+    }
     var btn = e.target.closest("button.del");
     if(!btn) return;
     var id = btn.getAttribute("data-id");
     entries = entries.filter(function(en){ return en.id !== id; });
+    if(id === editingId) resetForm();
     saveEntries(entries);
     renderList();
     renderStats();
@@ -599,30 +676,36 @@
       return;
     }
     if(!selectedPerson){
-      showToast("Bitte auswählen: Georg, Dorothea oder Beide");
+      showToast("Bitte auswählen, für wen");
       return;
     }
     var iso = datumInp.value || daysAgoIso(0);
     var isToday = iso === daysAgoIso(0);
-    var entry = {
-      id: Date.now() + "-" + Math.random().toString(36).slice(2,7),
-      iso: iso,
-      ts: Date.now(),
-      zweck: zweck,
-      minuten: minuten,
-      person: selectedPerson
-    };
-    entries.push(entry);
+    var message;
+    var existing = editingId && entries.find(function(x){ return x.id === editingId; });
+    if(existing){
+      existing.iso = iso;
+      existing.zweck = zweck;
+      existing.minuten = minuten;
+      existing.person = selectedPerson;
+      message = "Änderung gespeichert";
+    } else {
+      entries.push({
+        id: Date.now() + "-" + Math.random().toString(36).slice(2,7),
+        iso: iso,
+        ts: Date.now(),
+        zweck: zweck,
+        minuten: minuten,
+        person: selectedPerson
+      });
+      message = isToday ? "Eintrag gespeichert" : "Nachtrag für " + fmtDateShort(new Date(iso + "T00:00:00")) + " gespeichert";
+    }
     var saved = saveEntries(entries);
+    resetForm();
     renderList();
     renderStats();
-    minutenInp.value = "";
-    eigenerText.value = "";
-    eigenerFeld.hidden = true;
-    zweckSel.value = ZWECKE[0];
-    setDatum(daysAgoIso(0));
     if(saved){
-      showToast(isToday ? "Eintrag gespeichert" : "Nachtrag für " + fmtDateShort(new Date(iso + "T00:00:00")) + " gespeichert");
+      showToast(message);
     } else {
       showToast("Achtung: nicht dauerhaft gespeichert!");
       storageWarning.hidden = false;
